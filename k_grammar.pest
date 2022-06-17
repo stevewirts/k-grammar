@@ -1,0 +1,415 @@
+parse = _{
+	parse_expressions
+}
+parse_expressions = {
+	";"* ~ semi_list_hidden?
+}
+n = {
+	reduce ~ n?
+}
+reduce = _{
+	infix |
+    prenoun
+}
+prenoun = _{
+	apply_index_or_iterator |
+    noun
+}
+
+////////////////////////////////////////////////////////////////////
+/// noun constructions
+infix = {
+	!unary ~ prenoun ~ infix_operator ~ n
+}
+infix_operator = _{
+	apply_chain_iterator |
+	!apply_chain_index ~ (amend_in_place | binary)
+}
+
+////////////////////////////////////////////////////////////////////
+/// index & iteration stream construction
+/// knowing if an operation is available to be used in infix
+/// requires knowing if the stream of cluster "[]" and iterators ends with an iterator 
+/// this "list-ifies" these two operations instead of nesting them recursively
+apply_index_or_iterator = _{
+	apply_chain_iterator | apply_chain_index
+}
+apply_chain_iterator = {
+	!bracket_list ~ noun_binary_first ~ end_with_iterator_ ~ !bracket_list
+}
+end_with_iterator_ = _{
+	iterator* ~ (bracket_list+ ~ iterator+)+ |
+	iterator+ 
+}
+apply_chain_index = {
+	noun_binary_first ~ end_with_bracket_list_ ~ !iterator
+}
+end_with_bracket_list_ = _{
+	bracket_list* ~ (iterator+ ~ bracket_list+)+ |
+	bracket_list+ 
+}
+
+/////////////////////////////////////////////////////////////////////
+noun = _{
+    unary ~ ":"? |
+	noun_ |
+    binary
+}
+noun_binary_first = _{
+    binary |
+	noun_ |
+    unary ~ ":"?
+}
+noun_ = _{
+	bracket_list_or_wrapped_noun |
+    table |
+	enlist |
+    lamda |
+    iterator |
+    var |
+    number_thing |
+    vector |
+    scalar
+}
+bracket_list_or_wrapped_noun = _{
+	"[" ~ noun ~ "]" |
+	"(" ~ noun ~ ")" |
+    bracket_list
+}
+amend_in_place = !{
+    !"::" ~ binary ~ ":"
+}
+/////////////////////////////////////////////////////////////////////////////////
+/// unary or formerly known and monads all end with a _
+flip_ = { "+" }
+negate_ = { !int ~ "-" }
+first_ = { "*" }
+none_ = { "%" }
+til_ = { "!" }
+where_ = { "&" }
+reverse_ = { "|" }
+asc_ = { "<" }
+dsc_ = { ">" }
+group_ = { "=" }
+not_ = { "~" }
+enlist_ = { "," }
+sort_ = { "^" }
+count_ = { "#" }
+floor_ = { "_" }
+string_ = { "$" }
+unique_ = { "?" }
+type_ = { "@" }
+eval_ = { "." ~ !var }
+
+unary = {
+	unary_ |
+    eval_
+}
+unary_ = _{
+    flip_ |
+    negate_ |
+    first_ |
+    none_ |
+    til_ |
+    where_ |
+    reverse_ |
+    asc_ |
+    dsc_ |
+    group_ |
+    not_ |
+    enlist_ |
+    sort_ |
+    count_ |
+    floor_ |
+    string_ |
+    unique_ |
+    type_
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// binary formerly known as dyads start and end with a _
+_plus_ = { "+" }
+_minus_ = { !int ~ "-" }
+_times_ = { "*" }
+_divide_ = { "%" }
+_dictionary_ = { "!" }
+_and_ = { "&" }
+_or_ = { "|" }
+_less_ = { "<" }
+_more_ = { ">" }
+_equal_ = { "=" }
+_match_ = { "~" }
+_concat_ = { "," }
+_cut_ = { "^" }
+_take_ = { "#" }
+_drop_ = { "_" }
+_value_ = { "$" }
+_find_ = { "?" }
+_at_ = { "@" }
+_dot_ = { "." ~ !var }
+_assign_ = { ":" }
+
+binary = {
+    _plus_ |
+    _minus_ |
+    _times_ |
+    _divide_ |
+    _dictionary_ |
+    _and_ |
+    _or_ |
+    _less_ |
+    _more_ |
+    _equal_ |
+    _match_ |
+    _concat_ |
+    _cut_ |
+    _take_ |
+    _drop_ |
+    _value_ |
+    _find_ |
+    _at_ |
+    _dot_ |
+    _assign_
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// iterator
+eachright = { "/:" }  
+eachleft = { "\\:" }
+eachprior = { "':" }
+each = { "'" }
+over = { "/"}
+scan = { "\\" }
+
+iterator = {
+    eachright |
+    eachleft |
+    eachprior |
+    over |
+    scan |
+    each
+}
+/////////////////////////////////////////////////////////////////////////////////
+/// list types
+/// this section was painstakingly crafted to simulate the exact
+/// semantics shown by the k parser with respect to how it handles
+/// lists "(a;b;c)", denoted by a leading a ";" in the generated parse tree, and
+/// bracket_lists "[a;b;c]" denoted by a leding "enlist" keyword
+enlist = { 
+    "(" ~ semi_list_inside? ~ ")"
+}
+bracket_list = _{
+	null_brackets |
+    "[" ~ semi_list_? ~ "]"
+}
+semi_list_ = _{
+	semi_list | semi_list_all_nulls
+}
+semi_list_all_nulls = {
+	semi_list_null+
+}
+semi_list = {
+	semi_list_private
+}
+semi_list_private = _{ // don't use me directly, use semi_list_
+	COMMENT* ~
+	semi_list_inside
+}
+semi_list_hidden = _{ // don't use me directly, use semi_list_
+	COMMENT* ~
+	semi_list_hidden_inside
+}
+semi_list_inside = _{
+    (semi_list_item ~ (list_pair | semi_list_null)*) |
+    (semi_list_null+ ~ semi_list_item ~ (list_pair | semi_list_null)+ ~ semi_list_null*) |
+    semi_list_null+ ~ n
+}
+semi_list_hidden_inside = _{
+    (semi_list_hidden_item ~ (list_pair_hidden | semi_list_null)*) |
+    (semi_list_hidden_item+ ~ semi_list_hidden_item ~ (list_pair_hidden | semi_list_null)+ ~ semi_list_null*) |
+    semi_list_null+ ~ n
+}
+list_pair = _{
+	semi_list_delim ~ semi_list_item
+}
+list_pair_hidden = _{
+	semi_list_delim ~ semi_list_hidden_item
+}
+semi_list_null = {
+ &semi_list_delim ~ null
+}
+semi_list_delim = _{
+	";" | "\n"
+}
+semi_list_hidden_item = _{
+    expression
+}
+expression = {
+	n
+}
+semi_list_item = _{
+    n
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// nouns
+var = @{ !". " ~ ("." | ASCII_ALPHA)+ ~ ("." | ASCII_ALPHANUMERIC)* }
+
+/////////////////////////////////////////////////////////////////////////////////
+/// numbers 
+number_thing = _{ array_int | array_float | float | int }
+
+/////////////////////////////////////////////////////////////////////////////////
+/// floats 
+float = @{ "-"? ~ (decimal_number ~ !type_int ~ type_float? | whole_number ~ type_float) }
+array_float = ${
+	// first parse for the real rules of float arrays and make sure it passes
+	&(("-"? ~ whole_number ~ (" "+ ~ "-"? ~ whole_number)+ ~ type_float) | 
+	("-"? ~ (decimal_number | whole_number) ~ (" "+ ~ "-"? ~ (decimal_number | whole_number))+ ~ type_float?))
+	// then re-parse as floats/ints
+	~ (" "? ~ (float | !(whole_number ~ type_int) ~ int))*
+}
+whole_number = { ASCII_DIGIT+ }
+decimal_number = _{ decimal_middle | decimal_before | decimal_after }
+decimal_before = @{ "." ~ whole_number }
+decimal_after = @{ whole_number ~ "." }
+decimal_middle = @{ whole_number ~ "." ~ whole_number } 
+
+/////////////////////////////////////////////////////////////////////////////////
+/// integers 
+int = @{ "-"? ~ ((decimal_number ~ type_int) | whole_number ~ type_int?) }
+array_int = ${
+	// first parse for the real rules of int arrays and make sure it passes
+	&("-"? ~ whole_number ~ (" "+ ~ "-"? ~ whole_number)+ ~ !(type_float | ".") ~ type_int?)
+	// then re-parse as ints
+    ~ (" "? ~ int)* 
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// scalars
+boolean = @{ ("0" | "1") ~ type_boolean }
+
+byte = @{ "0x" ~ ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT }
+
+char = @{ "\"" ~ prim_char ~ "\"" }
+
+symbol = @{ "`" ~ (":" | "." | prim_char_for_symbol)* }
+
+timestamp = @{ 
+  ASCII_DIGIT ~ ASCII_DIGIT ~ ASCII_DIGIT ~ ASCII_DIGIT ~ "." ~
+  ("10" | "11" | "12" | "0" ~ ASCII_NONZERO_DIGIT) ~ "." ~
+  ("10" | "11" | "12" | "0" ~ ASCII_NONZERO_DIGIT) ~ "T" ~
+  '0'..'2' ~ '0'..'4' ~ ":" ~
+  '0'..'5' ~ ASCII_DIGIT ~ ":" ~
+  '0'..'5' ~ ASCII_DIGIT ~ ("." ~ ASCII_DIGIT+)?
+}
+
+scalar = _{
+	boolean |
+    byte |
+    char |
+    symbol |
+    timestamp
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// vectors
+boolean_array = @{ ("0" | "1")+ ~ type_boolean }
+
+byte_array = @{ byte ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)+ }
+
+string = @{ "\"" ~ (prim_char ~ prim_char+)* ~ "\"" }
+
+symbol_array = @{ symbol ~ symbol+ } 
+
+timestamp_array = ${ timestamp ~ (WHITESPACE* ~ timestamp)+ }
+
+vector = _{
+  boolean_array |
+  byte_array |
+  string |
+  array_float |
+  array_int |
+  symbol_array |
+  timestamp_array
+}
+/////////////////////////////////////////////////////////////////////////////////
+/// table
+table = {
+	"(" ~ keys ~ values ~ ")"
+}
+
+keys = {
+	bracket_list
+}
+
+values = {
+  semi_list_
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// misc
+
+/////////////////////////////////////////////////////////////////////////////////
+/// lamda
+lamda = {
+	"{" ~ anc ~ "}" |
+	"{" ~ lamda_content* ~ "}"
+}
+lamda_content = _{
+	anc ~ "{" ~ anc ~ (root_nested_lamda | lamda_content*) ~ anc ~ "}" ~ anc
+}
+root_nested_lamda = _{
+	"{" ~ anc ~ "}"
+}
+anc = _{
+	any_no_curlys
+}
+any_no_curlys = _{
+	(!("{" | "}") ~ ANY)*
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// types
+type_boolean = _{ "b" }
+type_byte = _{ "x" }
+type_int = _{ "j" | "i" | "h" }
+type_float = _{ "f" | "e" }
+type_char = _{ "c" }
+type_symbol = _{ "s" }
+type_timestamp = _{ "t" }
+
+/////////////////////////////////////////////////////////////////////////////////
+/// nulls
+null_timestamp = @{ "0Np"}
+null_float = @{ "0Ne" | "0n" }
+null_char = @{ "\" \"" }
+null_symbol = @{ "`" }
+null_int = @{ "0N" ~ type_int* }
+null_brackets = {
+	&("[" ~ "]") ~ null
+}
+general_null = { "::"}
+null = { ";" | "\n" | "::" | ("[" ~ "]") } // only used as label
+
+/////////////////////////////////////////////////////////////////////////////////
+/// chars
+prim_char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+off_limit_chars_for_symbols = _{
+ "`" | " " | "(" | ")" | ";" | "[" | "]" | "{" | "}" | "'" | ":" | unary_
+}
+prim_char_for_symbol = {
+    !("\"" | "\\") ~ !off_limit_chars_for_symbols ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+WHITESPACE = _{ " " | "\t" }
+COMMENT = _{
+    "/\n" ~ (!"\\\n" ~ ANY)* ~ "\\\n"? |
+    ("/"+ ~ " ") ~ (!"\n" ~ ANY)* ~ "\n"?
+}
